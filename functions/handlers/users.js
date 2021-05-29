@@ -6,7 +6,11 @@ const { uuid } = require("uuidv4");
 const firebase = require("firebase");
 firebase.initializeApp(config);
 
-const { validateSignupData, validateLoginData } = require("../util/validators");
+const {
+  validateSignupData,
+  validateLoginData,
+  reduceUserDetails,
+} = require("../util/validators");
 
 // Save new users to db
 exports.signup = (req, res) => {
@@ -96,6 +100,49 @@ exports.login = (req, res) => {
     });
 };
 
+//Add user details
+exports.addUserDetails = (req, res) => {
+  let userDetails = reduceUserDetails(req.body);
+
+  db.doc(`/users/${req.user.handle}`)
+    .update(userDetails)
+    .then(() => {
+      return res.json({ message: "Details added succesfully" });
+    })
+    .catch((err) => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
+};
+
+//Get own user details
+exports.getAuthenticatedUser = (req, res) => {
+  let userData = {};
+  db.doc(`users/${req.user.handle}`)
+    .get()
+    .then((doc) => {
+      if (doc.exists) {
+        userData.credentials = doc.data();
+        return db
+          .collection("likes")
+          .where("userHandle", "==", req.user.handle)
+          .get();
+      }
+    })
+    .then((data) => {
+      userData.likes = [];
+      data.forEach((doc) => {
+        userData.likes.push(doc.data());
+      });
+      return res.json(userData);
+    })
+    .catch((err) => {
+      console.error(err);
+      return res.status(500).json({ error: err.code });
+    });
+};
+
+//Image upload
 exports.uploadImage = (req, res) => {
   const BusBoy = require("busboy");
   const path = require("path");
@@ -116,12 +163,10 @@ exports.uploadImage = (req, res) => {
       mimetype !== "image/png" &&
       mimetype !== "image/jpg"
     ) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Wrong file type submitted, accepted types are: jpeg/jpg, or png",
-        });
+      return res.status(400).json({
+        error:
+          "Wrong file type submitted, accepted types are: jpeg/jpg, or png",
+      });
     }
 
     const imageExtension = filename.split(".")[filename.split(".").length - 1];
